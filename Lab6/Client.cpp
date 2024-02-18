@@ -1,6 +1,4 @@
-﻿// Client part for Server-Client chat. Developed by Mr_Dezz
-
-#include <iostream>
+﻿#include <iostream>
 #include <WinSock2.h>
 #include <WS2tcpip.h>
 #include <inaddr.h>
@@ -15,19 +13,17 @@ using namespace std;
 int main(void)
 {
 	//Key constants
-	const char SERVER_IP[] = "127.0.0.1";					// Enter IPv4 address of Server
-	const short SERVER_PORT_NUM = 3000;				// Enter Listening port on Server side
-	const short BUFF_SIZE = 1024;					// Maximum size of buffer for exchange info between server and client
+	const char SERVER_IP[] = "127.0.0.1";					// Адрес сервера
+	const short SERVER_PORT_NUM = 3000;				// Порт сервера
+	const short BUFF_SIZE = 1024;// Максимальный размер буфера для обмена информацией между сервером и клиентом
+	int erStat;	
 
-	// Key variables for all program
-	int erStat;										// For checking errors in sockets functions
-
-	//IP in string format to numeric format for socket functions. Data is in "ip_to_num"
+	//IP в строковом формате в числовой формат для функций сокета. Данные находятся в «ip_to_num»
 	in_addr ip_to_num;
 	inet_pton(AF_INET, SERVER_IP, &ip_to_num);
 
 
-	// WinSock initialization
+	//Инициализация WinSock
 	WSADATA wsData;
 	erStat = WSAStartup(MAKEWORD(2, 2), &wsData);
 
@@ -39,7 +35,7 @@ int main(void)
 	else
 		cout << "WinSock initialization is OK" << endl;
 
-	// Socket initialization
+	// Создание сокета
 	SOCKET ClientSock = socket(AF_INET, SOCK_STREAM, 0);
 
 	if (ClientSock == INVALID_SOCKET) {
@@ -50,7 +46,7 @@ int main(void)
 	else
 		cout << "Client socket initialization is OK" << endl;
 
-	// Establishing a connection to Server
+	// Установление соединения с сервером
 	sockaddr_in servInfo;
 
 	ZeroMemory(&servInfo, sizeof(servInfo));
@@ -71,24 +67,24 @@ int main(void)
 		cout << "Connection established SUCCESSFULLY. Ready to send a message to Server" << endl;
 
 
-	//Exchange text data between Server and Client. Disconnection if a Client send "xxx"
-
-	vector <char> servBuff(BUFF_SIZE), clientBuff(BUFF_SIZE);							// Buffers for sending and receiving data
-	short packet_size = 0;												// The size of sending / receiving packet in bytes
-
+	//Обмен текстовыми данными между Сервером и Клиентом. Отключение, если Клиент отправляет «xxx»
+	// Буферы для отправки и получения данных
+	vector <char> servBuff(BUFF_SIZE), clientBuff(BUFF_SIZE);
+	// Размер отправляемого/принимаемого пакета в байтах
+	short packet_size = 0;			
 	while (true) {
 
 		cout << "Your (Client) message to Server: ";
 		fgets(clientBuff.data(), clientBuff.size(), stdin);
 
-		// Check whether client like to stop chatting 
+		// Проверка, хочет ли клиент прекратить общение
 		if (clientBuff[0] == 'x' && clientBuff[1] == 'x' && clientBuff[2] == 'x') {
 			shutdown(ClientSock, SD_BOTH);
 			closesocket(ClientSock);
 			WSACleanup();
 			return 0;
 		}
-
+		//Отправка сообщения серверу
 		packet_size = send(ClientSock, clientBuff.data(), clientBuff.size(), 0);
 
 		if (packet_size == SOCKET_ERROR) {
@@ -97,7 +93,7 @@ int main(void)
 			WSACleanup();
 			return 1;
 		}
-
+		//Принятие сообщения от сервера
 		packet_size = recv(ClientSock, servBuff.data(), servBuff.size(), 0);
 
 		if (packet_size == SOCKET_ERROR) {
