@@ -1,143 +1,117 @@
 ﻿#include <iostream>
-#include <WinSock2.h>
-#include <WS2tcpip.h>
-#include <stdio.h>
+#include <string>
+#include <thread>
 #include <vector>
-#pragma comment(lib, "Ws2_32.lib")
-using namespace std;
-int main()
-{
-	const char IP_SERV[] = "127.0.0.1";	// IP-адрес локального сервера
-	const int PORT_NUM = 3000;		//Порт сервера
-	const short BUFF_SIZE = 1024;// Максимальный размер буфера для обмена информацией между сервером и клиентом	
-	int erStat;	//Сохранение статуса ошибок сокета
-	//IP в строковом формате в числовой формат для функций сокета. Данные находятся в «ip_to_num»
-	in_addr ip_to_num;
-	erStat = inet_pton(AF_INET, IP_SERV, &ip_to_num);
+#include <cstring>
+#include <WS2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
 
-	if (erStat <= 0) {
-		cout << "Error in IP translation to special numeric format" << endl;
-		return 1;
-	}
-	// Инициализация WinSock
-	WSADATA wsData;
+bool running = true;
+std::vector<std::pair<SOCKET, std::string>> clients;
 
-	erStat = WSAStartup(MAKEWORD(2, 2), &wsData);
+void handleClient(SOCKET clientSocket, const std::string& name) {
+    char buffer[1024];
+    while (running) {
+        memset(buffer, 0, sizeof(buffer));
+        int bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
+        if (bytesReceived <= 0) {
+            std::cout << "Connection lost with client: " << name << std::endl;
+            closesocket(clientSocket);
 
-	if (erStat != 0) {
-		cout << "Error WinSock version initializaion #";
-		cout << WSAGetLastError();
-		return 1;
-	}
-	else
-		cout << "WinSock initialization is OK" << endl;
+            // Remove disconnected client from the list
+            for (auto it = clients.begin(); it != clients.end(); ++it) {
+                if (it->first == clientSocket) {
+                    clients.erase(it);
+                    break;
+                }
+            }
 
-	// Инициализация сокета сервера
-	SOCKET ServSock = socket(AF_INET, SOCK_STREAM, 0);
+            return;
+        }
+        std::string message = std::string(buffer, bytesReceived);
+        std::cout << name << ": " << message << std::endl;
 
-	if (ServSock == INVALID_SOCKET) {
-		cout << "Error initialization socket # " << WSAGetLastError() << endl;
-		closesocket(ServSock);
-		WSACleanup();
-		return 1;
-	}
-	else
-		cout << "Server socket initialization is OK" << endl;
+        // Check if client sent "exit"
+        if (message == "exit") {
+            std::cout << "Client " << name << " sent exit message. Disconnecting..." << std::endl;
+            closesocket(clientSocket);
 
-	// Привязка сокета сервера
-	sockaddr_in servInfo;
-	ZeroMemory(&servInfo, sizeof(servInfo));	//Инициализация структуры servInfo
+            // Remove client from the list
+            for (auto it = clients.begin(); it != clients.end(); ++it) {
+                if (it->first == clientSocket) {
+                    clients.erase(it);
+                    break;
+                }
+            }
 
-	servInfo.sin_family = AF_INET;
-	servInfo.sin_addr = ip_to_num;
-	servInfo.sin_port = htons(PORT_NUM);
+            return;
+        }
 
-	erStat = bind(ServSock, (sockaddr*)&servInfo, sizeof(servInfo));
-
-	if (erStat != 0) {
-		cout << "Error Socket binding to server info. Error # " << WSAGetLastError() << endl;
-		closesocket(ServSock);
-		WSACleanup();
-		return 1;
-	}
-	else
-		cout << "Binding socket to Server info is OK" << endl;
-
-	// Начало прослушивания клиентов
-	erStat = listen(ServSock, SOMAXCONN);
-
-	if (erStat != 0) {
-		cout << "Can't start to listen to. Error # " << WSAGetLastError() << endl;
-		closesocket(ServSock);
-		WSACleanup();
-		return 1;
-	}
-	else {
-		cout << "Listening..." << endl;
-	}
-
-	//Создание и принятие клиентского сокета в случае подключения
-	sockaddr_in clientInfo;
-	ZeroMemory(&clientInfo, sizeof(clientInfo));	//Инициализация структуры clientInfo
-
-	int clientInfo_size = sizeof(clientInfo);
-
-	SOCKET ClientConn = accept(ServSock, (sockaddr*)&clientInfo, &clientInfo_size);
-
-	if (ClientConn == INVALID_SOCKET) {
-		cout << "Client detected, but can't connect to a client. Error # " << WSAGetLastError() << endl;
-		closesocket(ServSock);
-		closesocket(ClientConn);
-		WSACleanup();
-		return 1;
-	}
-	else {
-		cout << "Connection to a client established successfully" << endl;
-		char clientIP[22];
-		/*Преобразование IP-адреса подключенного клиента в стандартный строковый формат.*/
-		inet_ntop(AF_INET, &clientInfo.sin_addr, clientIP, INET_ADDRSTRLEN);	
-		cout << "Client connected with IP address " << clientIP << endl;
-
-	}
-
-	//Обмен текстовыми данными между Сервером и Клиентом. Отключение, если клиент отправляет «xxx»
-	// Создание буферов для отправки и получения данных
-	vector <char> servBuff(BUFF_SIZE), clientBuff(BUFF_SIZE);
-	// Размер отправляемого/принимаемого пакета в байтах
-	short packet_size = 0;
-
-	while (true) {
-		// Получение пакета от клиента. Программа ожидает (системная пауза) пока не получит
-		packet_size = recv(ClientConn, servBuff.data(), servBuff.size(), 0);					
-		cout << "Client's message: " << servBuff.data() << endl;
-		cout << "Your (host) message: ";
-		fgets(clientBuff.data(), clientBuff.size(), stdin);
-
-		// Проверка, является ли сервер инициатором отмены
-		if (clientBuff[0] == 'x' && clientBuff[1] == 'x' && clientBuff[2] == 'x') {
-			shutdown(ClientConn, SD_BOTH);
-			closesocket(ServSock);
-			closesocket(ClientConn);
-			WSACleanup();
-			return 0;
-		}
-
-		packet_size = send(ClientConn, clientBuff.data(), clientBuff.size(), 0);
-
-		if (packet_size == SOCKET_ERROR) {
-			cout << "Can't send message to Client. Error # " << WSAGetLastError() << endl;
-			closesocket(ServSock);
-			closesocket(ClientConn);
-			WSACleanup();
-			return 1;
-		}
-
-	}
-
-	closesocket(ServSock);
-	closesocket(ClientConn);
-	WSACleanup();
-
-	return 0;
+        // Send received message to all other clients
+        for (const auto& otherClient : clients) {
+            if (otherClient.first != clientSocket) {
+                send(otherClient.first, (name + ": " + message).c_str(), message.size() + name.size() + 2, 0);
+            }
+        }
+    }
 }
 
+int main() {
+    WSADATA wsData;
+    WORD ver = MAKEWORD(2, 2);
+    int wsOK = WSAStartup(ver, &wsData);
+    if (wsOK != 0) {
+        std::cerr << "Can't initialize Winsock! Quitting" << std::endl;
+        return -1;
+    }
+
+    SOCKET serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (serverSocket == INVALID_SOCKET) {
+        std::cerr << "Can't create socket! Quitting" << std::endl;
+        WSACleanup();
+        return -1;
+    }
+
+    sockaddr_in hint;
+    hint.sin_family = AF_INET;
+    hint.sin_port = htons(54000);
+    hint.sin_addr.S_un.S_addr = INADDR_ANY;
+
+    bind(serverSocket, (sockaddr*)&hint, sizeof(hint));
+    listen(serverSocket, SOMAXCONN);
+
+    std::cout << "Server is listening for connections..." << std::endl;
+
+    while (running) {
+        sockaddr_in client;
+        int clientSize = sizeof(client);
+        SOCKET clientSocket = accept(serverSocket, (sockaddr*)&client, &clientSize);
+
+        char host[NI_MAXHOST];
+        char service[NI_MAXSERV];
+        memset(host, 0, NI_MAXHOST);
+        memset(service, 0, NI_MAXSERV);
+        getnameinfo((sockaddr*)&client, sizeof(client), host, NI_MAXHOST, service, NI_MAXSERV, 0);
+
+        char clientName[4096];
+        int nameSize = recv(clientSocket, clientName, sizeof(clientName), 0);
+
+        clientName[nameSize] = '\0'; // Add null terminator
+        std::cout << "Connected: " << clientName << " on port " << service << std::endl;
+
+        clients.push_back({ clientSocket, std::string(clientName) });
+
+        std::thread t(handleClient, clientSocket, std::string(clientName));
+        t.detach();
+    }
+
+
+    for (const auto& client : clients) {
+        closesocket(client.first);
+    }
+    closesocket(serverSocket);
+
+    WSACleanup();
+
+    return 0;
+}
