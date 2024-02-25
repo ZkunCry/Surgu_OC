@@ -5,6 +5,7 @@
 #pragma comment(lib, "ws2_32.lib")
 
 int main() {
+    //Инициализация WinSock
     WSADATA wsData;
     WORD ver = MAKEWORD(2, 2);
     int wsOK = WSAStartup(ver, &wsData);
@@ -12,14 +13,17 @@ int main() {
         std::cerr << "Can't initialize Winsock! Quitting" << std::endl;
         return -1;
     }
-
+    //Создание сокета с использованием протокола TCP
     SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock == INVALID_SOCKET) {
         std::cerr << "Can't create socket! Quitting" << std::endl;
         WSACleanup();
         return -1;
     }
-
+    //Установка соединения с сервером
+    /*Создается структура sockaddr_in, которая содержит информацию об адресе и порте сервера.
+        inet_pton() конвертирует строку "127.0.0.1" в формат сетевого адреса и сохраняет его в структуре.
+        Далее выполняется вызов connect() для установки соединения с сервером.*/
     sockaddr_in hint;
     hint.sin_family = AF_INET;
     hint.sin_port = htons(54000);
@@ -32,7 +36,7 @@ int main() {
         WSACleanup();
         return -1;
     }
-
+    //Отправка имени клиента на сервер
     std::string name;
     std::cout << "Enter your name: ";
     std::getline(std::cin, name);
